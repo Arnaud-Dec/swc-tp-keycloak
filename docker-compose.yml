@@ -1,0 +1,24 @@
+services:
+  webapp:
+    build: ./webapp
+    environment:
+      APP_SECRET_KEY: a-secret-key-here
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: webapp
+      KEYCLOAK_BACKEND_CLIENT_ID: webapp-backend
+      KEYCLOAK_BACKEND_CLIENT_SECRET: <put-keycloak-client-secret-here>
+    volumes:
+      - ./webapp:/webapp
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: start-dev --hostname=http://localhost:8080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./keycloak-data/:/opt/keycloak/data/

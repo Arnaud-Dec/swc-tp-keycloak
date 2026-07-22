@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Login</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="/static/script.js" defer></script>
+</head>
+<body>
+  <div class="bubbles" aria-hidden="true">
+    <div class="bubble b1"></div>
+    <div class="bubble b2"></div>
+  </div>
+
+  <main class="card" role="main" aria-labelledby="signin-title">
+    <div id="clock">
+      <div class="time" id="time">00:00</div>
+      <div class="date" id="date">-- -- ----</div>
+    </div>
+
+    <div class="avatar" aria-hidden="true">
+      <img src="/static/profile.jpg" alt="Avatar" />
+    </div>
+
+    <div class="user" id="user">Vous n'êtes pas encore connecté, redirection ...</div>
+    <button class="btn" id="logoutBtn">Se déconnecter</button>
+  </main>
+</body>
+</html>
