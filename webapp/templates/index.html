@@ -35,18 +35,26 @@
       clientId: "webapp-frontend", // Nom du client frontend
     });
     keycloak.init({ onLoad: "login-required" })
-            .then((authenticated) => { // Action lorsque le standard flow est terminé :
+            .then(async (authenticated) => { // Action lorsque le standard flow est terminé :
               if (authenticated) {
-  // 👉 [TODO] si l'utilisateur est connecté :
-  //
-  // 1. Afficher à la place du texte du div[id="user"] :
-  // `Bienvenue ${keycloak.tokenParsed.email}`
-                document.getElementById("user").textContent = `Bienvenue ${keycloak.tokenParsed.email}`;
-  // 2. Appeler keycloak.logout() au clic sur le button[id="logoutBtn"]
+                // 1. Appel GET sur /api/account avec l'access token dans le header "Authorization"
+                const response = await fetch("/api/account", {
+                  method: "GET",
+                  headers: {
+                    "Authorization": `Bearer ${keycloak.token}`
+                  }
+                });
+                const data = await response.json();
+
+                // 2. Afficher `Bienvenue ${keycloak.tokenParsed.email}, balance : {...} €`
+                document.getElementById("user").textContent = response.ok
+                  ? `Bienvenue ${keycloak.tokenParsed.email}, balance : ${data.balance} €`
+                  : `Bienvenue ${keycloak.tokenParsed.email}, erreur : ${data.error}`;
+
+                // 3. Appeler keycloak.logout() au clic sur le button[id="logoutBtn"]
                 document.getElementById("logoutBtn").addEventListener("click", () => {
                   keycloak.logout();
                 });
-                
               }
             })
             .catch((error) => {
