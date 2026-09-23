@@ -10,7 +10,7 @@ app.secret_key = os.getenv("APP_SECRET_KEY")
 # Balances (accounts) of users (in euros)
 users_balances = {
     "admin": 120.00,
-    "admin-ad": 120.00,
+    "admin-ad": 130.00,
     "john":  17.53,
 }
 
