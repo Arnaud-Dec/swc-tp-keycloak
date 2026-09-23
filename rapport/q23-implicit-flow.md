@@ -1,89 +1,26 @@
-# Question 23 – Diagramme de séquence : Implicit flow
+# Question 23 – Implicit flow
 
-> Keycloak est exposé sur `http://localhost:8090` dans notre environnement (le sujet utilise `8080`).
-> Configuration : client `webapp-frontend` avec *Implicit flow* coché (et *Standard flow* décoché),
+> Configuration : client `webapp-frontend` avec *Implicit flow* activé à la place de *Standard flow*,
 > et `keycloak.init({ onLoad: "login-required", flow: "implicit" })`.
 
-## Diagramme
+![Diagramme de séquence de l'Implicit flow](q23-implicit-flow.png)
 
-![Diagramme](q23-implicit-flow.png)
+## (a) `GET /realms/webapp/protocol/openid-connect/auth` : toujours là, mais différente
 
-Source Mermaid (`src/q23-implicit-flow.mmd`, config `src/mermaid-config.json`) :
+Les paramètres sont les mêmes qu'en Standard flow, à deux différences près :
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor U as Utilisateur
-    participant B as Navigateur<br/>(index.html + keycloak-js)
-    participant F as Webapp Flask<br/>localhost:8081
-    participant K as Keycloak<br/>localhost:8090 · realm webapp
-
-    U->>B: Ouvre http://localhost:8081
-    B->>F: GET /
-    F-->>B: 200 OK — index.html
-    Note over B: keycloak.init({ onLoad: "login-required",<br/>flow: "implicit" })<br/>génère state, nonce (pas de PKCE)
-
-    rect rgb(232, 240, 254)
-    Note over B,K: (a) Requête d'autorisation
-    B->>K: GET /realms/webapp/protocol/openid-connect/auth
-    Note over B,K: client_id=webapp-frontend<br/>redirect_uri=http://localhost:8081/<br/>response_type=id_token token  ·  response_mode=fragment  ·  scope=openid<br/>state=…  ·  nonce=…
-    alt Utilisateur NON connecté (pas de cookie SSO)
-        K-->>B: 200 OK — page de login
-        U->>B: Saisit identifiant + mot de passe
-        B->>K: POST /realms/webapp/login-actions/authenticate
-        Note over K: vérifie les identifiants<br/>crée la session SSO
-        K-->>B: 302 Found + Set-Cookie (KEYCLOAK_IDENTITY, KEYCLOAK_SESSION)
-    else Utilisateur DÉJÀ connecté (cookie SSO valide)
-        K-->>B: 302 Found — sans page de login
-    end
-    Note over B,K: Location: http://localhost:8081/#35;state=…&session_state=…&iss=…<br/>&access_token=eyJ…&token_type=Bearer&id_token=eyJ…&expires_in=300
-    end
-
-    B->>F: GET / (le fragment n'est pas envoyé au serveur)
-    F-->>B: 200 OK — index.html
-    Note over B: lit le fragment, vérifie state et nonce<br/>stocke access_token + id_token<br/>authenticated = true
-
-    rect rgb(254, 242, 242)
-    Note over B,K: (b) AUCUNE requête vers /openid-connect/token<br/>les tokens arrivent directement dans l'URL — pas de refresh_token
-    end
-
-    rect rgb(245, 243, 255)
-    Note over B,K: Utilisation du token
-    B->>F: GET /api/account — Authorization: Bearer
-    F->>K: GET /userinfo — Authorization: Bearer
-    K-->>F: 200 OK — sub, email… (401 si invalide)
-    F-->>B: 200 OK — { balance }
-    B-->>U: « Bienvenue <email>, balance : … € »
-    end
-
-    Note over B,K: À expiration de l'access token (300 s) : pas de refresh_token,<br/>il faut refaire la requête /auth (reconnexion silencieuse via le cookie SSO)
-```
-
-## Les 2 requêtes étudiées en Standard flow
-
-### (a) `GET …/openid-connect/auth` : toujours présente, avec d'autres paramètres
-
-| Paramètre | Standard flow | Implicit flow |
+| | Standard flow | Implicit flow |
 |---|---|---|
-| `client_id` | `webapp-frontend` | `webapp-frontend` |
-| `redirect_uri` | `http://localhost:8081/` | `http://localhost:8081/` |
-| `response_type` | `code` | **`id_token token`** : on demande directement les tokens |
-| `response_mode` | `fragment` | `fragment` |
-| `scope` | `openid` | `openid` |
-| `state` / `nonce` | oui | oui (le `nonce` est obligatoire en implicit) |
-| `code_challenge` (PKCE) | oui | **non** : il n'y a pas de code à protéger |
+| `response_type` | `code` | `id_token token` : on demande **directement les tokens** |
+| `code_challenge` (PKCE) | oui | non, il n'y a pas de code à protéger |
 
-**Codes HTTP :** les mêmes qu'en Standard flow.
-- Utilisateur non connecté : `200` avec la page de login, puis `302` après l'envoi du formulaire.
-- Utilisateur déjà connecté : `302` direct.
+Les codes HTTP sont les mêmes : `200` (page de login) puis `302`, ou `302` direct si déjà connecté.
+Mais la redirection contient maintenant les tokens eux-mêmes :
+`redirect_uri#access_token=…&id_token=…&expires_in=300` au lieu de `#code=…`.
 
-La différence est dans le contenu du `Location` de la redirection. Il contient directement
-`access_token`, `id_token`, `token_type`, `expires_in` (avec `state`, `session_state`, `iss`),
-au lieu d'un simple `code`.
+## (b) `POST /realms/webapp/protocol/openid-connect/token` : disparaît
 
-### (b) `POST …/openid-connect/token` : n'existe plus
-
-Il n'y a aucun échange de code contre des tokens, puisque les tokens arrivent dès la redirection de l'étape (a). Conséquences :
-- **pas de `refresh_token`** : à l'expiration de l'access token, il faut repasser par `/auth` ;
-- les tokens circulent **dans l'URL**, où ils peuvent se retrouver dans l'historique du navigateur, dans le header `Referer`, ou être lus par une extension ou un script injecté (XSS) ;
-- pas de PKCE, donc aucune preuve que l'application qui reçoit les tokens est bien celle qui les a demandés.
+Les tokens arrivent dès l'étape (a), il n'y a donc plus d'échange de code. Conséquences :
+- **pas de `refresh_token`** : quand l'access token expire, il faut repasser par `/auth` ;
+- **les tokens passent dans l'URL** : ils peuvent fuiter (historique du navigateur, script malveillant…) ;
+- **pas de PKCE** : rien ne prouve que l'application qui reçoit les tokens est celle qui les a demandés.

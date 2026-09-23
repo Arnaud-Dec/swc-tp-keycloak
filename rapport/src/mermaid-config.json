@@ -19,14 +19,14 @@
     "sequenceNumberColor": "#ffffff"
   },
   "sequence": {
-    "actorMargin": 150,
-    "width": 230,
-    "height": 60,
-    "messageMargin": 42,
-    "noteMargin": 14,
-    "boxMargin": 14,
+    "actorMargin": 120,
+    "width": 170,
+    "height": 50,
+    "messageMargin": 36,
+    "noteMargin": 12,
+    "boxMargin": 12,
     "boxTextMargin": 8,
-    "mirrorActors": true,
+    "mirrorActors": false,
     "messageAlign": "center",
     "wrap": false
   }

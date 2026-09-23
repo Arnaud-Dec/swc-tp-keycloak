@@ -1,46 +1,29 @@
 sequenceDiagram
     autonumber
     actor U as Utilisateur
-    participant B as Navigateur<br/>(index.html + keycloak-js)
-    participant F as Webapp Flask<br/>localhost:8081
-    participant K as Keycloak<br/>localhost:8090 · realm webapp
+    participant B as Navigateur
+    participant F as Webapp (Flask)
+    participant K as Keycloak
 
     U->>B: Ouvre http://localhost:8081
-    B->>F: GET /
-    F-->>B: 200 OK — index.html
-    Note over B: keycloak.init({ onLoad: "login-required",<br/>flow: "implicit" })<br/>génère state, nonce (pas de PKCE)
 
     rect rgb(232, 240, 254)
-    Note over B,K: (a) Requête d'autorisation
-    B->>K: GET /realms/webapp/protocol/openid-connect/auth
-    Note over B,K: client_id=webapp-frontend<br/>redirect_uri=http://localhost:8081/<br/>response_type=id_token token  ·  response_mode=fragment  ·  scope=openid<br/>state=…  ·  nonce=…
-    alt Utilisateur NON connecté (pas de cookie SSO)
-        K-->>B: 200 OK — page de login
-        U->>B: Saisit identifiant + mot de passe
-        B->>K: POST /realms/webapp/login-actions/authenticate
-        Note over K: vérifie les identifiants<br/>crée la session SSO
-        K-->>B: 302 Found + Set-Cookie (KEYCLOAK_IDENTITY, KEYCLOAK_SESSION)
-    else Utilisateur DÉJÀ connecté (cookie SSO valide)
-        K-->>B: 302 Found — sans page de login
+    B->>K: (a) GET /openid-connect/auth<br/>client_id, redirect_uri, response_type=id_token token
+    alt Pas encore connecté
+        K-->>B: 200 — page de login
+        U->>K: Saisit identifiant + mot de passe
+        K-->>B: 302 — redirection vers redirect_uri#35;access_token=…&id_token=…
+    else Déjà connecté (cookie Keycloak)
+        K-->>B: 302 — redirection vers redirect_uri#35;access_token=…&id_token=…
     end
-    Note over B,K: Location: http://localhost:8081/#35;state=…&session_state=…&iss=…<br/>&access_token=eyJ…&token_type=Bearer&id_token=eyJ…&expires_in=300
     end
-
-    B->>F: GET / (le fragment n'est pas envoyé au serveur)
-    F-->>B: 200 OK — index.html
-    Note over B: lit le fragment, vérifie state et nonce<br/>stocke access_token + id_token<br/>authenticated = true
 
     rect rgb(254, 242, 242)
-    Note over B,K: (b) AUCUNE requête vers /openid-connect/token<br/>les tokens arrivent directement dans l'URL — pas de refresh_token
+    Note over B,K: (b) Pas de requête /openid-connect/token : les tokens sont déjà dans l'URL
     end
 
-    rect rgb(245, 243, 255)
-    Note over B,K: Utilisation du token
-    B->>F: GET /api/account — Authorization: Bearer
-    F->>K: GET /userinfo — Authorization: Bearer
-    K-->>F: 200 OK — sub, email… (401 si invalide)
-    F-->>B: 200 OK — { balance }
-    B-->>U: « Bienvenue <email>, balance : … € »
-    end
-
-    Note over B,K: À expiration de l'access token (300 s) : pas de refresh_token,<br/>il faut refaire la requête /auth (reconnexion silencieuse via le cookie SSO)
+    B->>F: GET /api/account (Authorization: Bearer access_token)
+    F->>K: Vérifie le token (/userinfo)
+    K-->>F: Infos de l'utilisateur
+    F-->>B: { balance }
+    B-->>U: « Bienvenue …, balance : … € »
