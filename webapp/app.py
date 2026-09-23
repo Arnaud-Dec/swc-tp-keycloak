@@ -1,6 +1,7 @@
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from keycloak import KeycloakOpenID
+from keycloak.exceptions import KeycloakError
 import os
 
 app = Flask(__name__)
@@ -25,8 +26,23 @@ def index():
 
 @app.route("/api/account")
 def api_account():
-    # TODO
-    return {"error": "This API endpoint is not implemented yet"}
+    # a. Récupérer le JWT dans le header "Authorization" (format : "Bearer <token>")
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return {"error": "Missing or invalid Authorization header"}, 401
+    token = auth_header[len("Bearer "):]
+
+    # b. Vérifier la validité du JWT auprès de Keycloak et extraire les infos de l'utilisateur
+    try:
+        userinfo = keycloak_openid.userinfo(token)
+    except KeycloakError:
+        return {"error": "Invalid or expired token"}, 401
+
+    # c. Retourner la balance associée à l'utilisateur
+    username = userinfo.get("preferred_username")
+    if username not in users_balances:
+        return {"error": f"No account for user {username}"}, 404
+    return {"username": username, "balance": users_balances[username]}
 
 
 if __name__ == '__main__':
