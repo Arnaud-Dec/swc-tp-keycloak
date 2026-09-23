@@ -5,48 +5,61 @@
 
 ## Diagramme
 
+![Diagramme](q20-standard-flow.png)
+
+Source Mermaid (`src/q20-standard-flow.mmd`, config `src/mermaid-config.json`) :
+
 ```mermaid
 sequenceDiagram
     autonumber
     actor U as Utilisateur
     participant B as Navigateur<br/>(index.html + keycloak-js)
     participant F as Webapp Flask<br/>localhost:8081
-    participant K as Keycloak<br/>localhost:8090 (realm webapp)
+    participant K as Keycloak<br/>localhost:8090 · realm webapp
 
     U->>B: Ouvre http://localhost:8081
     B->>F: GET /
-    F-->>B: 200 OK (index.html)
-    B->>B: new Keycloak({url, realm, clientId})<br/>init({ onLoad: "login-required" })<br/>génère state, nonce, code_verifier<br/>code_challenge = BASE64URL(SHA256(code_verifier))
+    F-->>B: 200 OK — index.html
+    Note over B: keycloak.init({ onLoad: "login-required" })<br/>génère state, nonce, code_verifier<br/>code_challenge = BASE64URL(SHA256(code_verifier))
 
+    rect rgb(232, 240, 254)
     Note over B,K: (a) Requête d'autorisation
-    B->>K: GET /realms/webapp/protocol/openid-connect/auth<br/>?client_id=webapp-frontend<br/>&redirect_uri=http://localhost:8081/<br/>&response_type=code<br/>&response_mode=fragment<br/>&scope=openid<br/>&state=…&nonce=…<br/>&code_challenge=…&code_challenge_method=S256
-
-    alt Utilisateur NON connecté (pas de cookie de session Keycloak)
-        K-->>B: 200 OK — page de login HTML
-        U->>B: Saisit login + mot de passe
-        B->>K: POST /realms/webapp/login-actions/authenticate?…<br/>(username, password)
-        K->>K: Vérifie les identifiants, crée la session SSO
-        K-->>B: 302 Found<br/>Set-Cookie: KEYCLOAK_IDENTITY, KEYCLOAK_SESSION<br/>Location: http://localhost:8081/#35;state=…&session_state=…&iss=…&code=…
-    else Utilisateur DÉJÀ connecté (cookie de session SSO valide)
-        K-->>B: 302 Found (pas de page de login)<br/>Location: http://localhost:8081/#35;state=…&session_state=…&iss=…&code=…
+    B->>K: GET /realms/webapp/protocol/openid-connect/auth
+    Note over B,K: client_id=webapp-frontend<br/>redirect_uri=http://localhost:8081/<br/>response_type=code  ·  response_mode=fragment  ·  scope=openid<br/>state=…  ·  nonce=…<br/>code_challenge=…  ·  code_challenge_method=S256
+    alt Utilisateur NON connecté (pas de cookie SSO)
+        K-->>B: 200 OK — page de login
+        U->>B: Saisit identifiant + mot de passe
+        B->>K: POST /realms/webapp/login-actions/authenticate
+        Note over K: vérifie les identifiants<br/>crée la session SSO
+        K-->>B: 302 Found + Set-Cookie (KEYCLOAK_IDENTITY, KEYCLOAK_SESSION)
+    else Utilisateur DÉJÀ connecté (cookie SSO valide)
+        K-->>B: 302 Found — sans page de login
+    end
+    Note over B,K: Location: http://localhost:8081/#35;state=…&session_state=…&iss=…&code=…
     end
 
-    B->>F: GET / (le fragment #35;… n'est pas envoyé au serveur)
-    F-->>B: 200 OK (index.html)
-    B->>B: keycloak-js lit le fragment, vérifie que state correspond,<br/>récupère le code puis nettoie l'URL
+    B->>F: GET / (le fragment n'est pas envoyé au serveur)
+    F-->>B: 200 OK — index.html
+    Note over B: lit le fragment, vérifie state<br/>récupère le code, nettoie l'URL
 
+    rect rgb(236, 253, 243)
     Note over B,K: (b) Échange du code contre les tokens
-    B->>K: POST /realms/webapp/protocol/openid-connect/token<br/>Content-Type: application/x-www-form-urlencoded<br/>grant_type=authorization_code<br/>&code=…<br/>&client_id=webapp-frontend<br/>&redirect_uri=http://localhost:8081/<br/>&code_verifier=…
-    K->>K: Vérifie le code (usage unique, courte durée),<br/>le redirect_uri et SHA256(code_verifier) == code_challenge
-    K-->>B: 200 OK (JSON)<br/>{ access_token, expires_in: 300,<br/>refresh_token, refresh_expires_in: 1800,<br/>id_token, token_type: "Bearer",<br/>not-before-policy: 0, session_state, scope: "openid email profile" }
-    B->>B: Vérifie le nonce de l'id_token, stocke les tokens en mémoire<br/>authenticated = true
+    B->>K: POST /realms/webapp/protocol/openid-connect/token
+    Note over B,K: Content-Type: application/x-www-form-urlencoded<br/>grant_type=authorization_code  ·  code=…<br/>client_id=webapp-frontend  ·  redirect_uri=http://localhost:8081/<br/>code_verifier=…
+    Note over K: vérifie le code (usage unique),<br/>redirect_uri et SHA256(code_verifier)
+    K-->>B: 200 OK — JSON
+    Note over B,K: access_token  ·  expires_in: 300  ·  token_type: "Bearer"<br/>refresh_token  ·  refresh_expires_in: 1800<br/>id_token  ·  session_state  ·  scope: "openid email profile"
+    Note over B: vérifie le nonce de l'id_token<br/>authenticated = true
+    end
 
-    Note over B,K: Utilisation du token (appel API)
-    B->>F: GET /api/account<br/>Authorization: Bearer <access_token>
-    F->>K: GET http://keycloak:8080/realms/webapp/protocol/openid-connect/userinfo<br/>Authorization: Bearer <access_token>
-    K-->>F: 200 OK { sub, email, preferred_username, … }<br/>(401 si le token est invalide ou expiré)
-    F-->>B: 200 OK { "balance": … }
+    rect rgb(245, 243, 255)
+    Note over B,K: Utilisation du token
+    B->>F: GET /api/account — Authorization: Bearer
+    F->>K: GET /userinfo — Authorization: Bearer
+    K-->>F: 200 OK — sub, email… (401 si invalide)
+    F-->>B: 200 OK — { balance }
     B-->>U: « Bienvenue <email>, balance : … € »
+    end
 ```
 
 ## (a) Requête `GET …/openid-connect/auth`
