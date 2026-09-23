@@ -7,6 +7,7 @@
   <title>Login</title>
   <link rel="stylesheet" href="/static/style.css" />
   <script src="/static/script.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/keycloak-js@latest/dist/keycloak.min.js"></script>
 </head>
 <body>
   <div class="bubbles" aria-hidden="true">
@@ -27,5 +28,30 @@
     <div class="user" id="user">Vous n'êtes pas encore connecté, redirection ...</div>
     <button class="btn" id="logoutBtn">Se déconnecter</button>
   </main>
+  <script>
+    const keycloak = new Keycloak({
+      url: "http://localhost:8090", // URL du serveur Keycloak
+      realm: "webapp", // Nom du realm précédemment créé
+      clientId: "webapp-frontend", // Nom du client frontend
+    });
+    keycloak.init({ onLoad: "login-required" })
+            .then((authenticated) => { // Action lorsque le standard flow est terminé :
+              if (authenticated) {
+  // 👉 [TODO] si l'utilisateur est connecté :
+  //
+  // 1. Afficher à la place du texte du div[id="user"] :
+  // `Bienvenue ${keycloak.tokenParsed.email}`
+                document.getElementById("user").textContent = `Bienvenue ${keycloak.tokenParsed.email}`;
+  // 2. Appeler keycloak.logout() au clic sur le button[id="logoutBtn"]
+                document.getElementById("logoutBtn").addEventListener("click", () => {
+                  keycloak.logout();
+                });
+                
+              }
+            })
+            .catch((error) => {
+              console.error("Failed to initialize Keycloak :", error);
+            });
+  </script>
 </body>
 </html>
