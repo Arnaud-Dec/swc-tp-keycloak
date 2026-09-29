@@ -56,6 +56,12 @@ Sinon, `jwt.decode` renvoie le payload : on y lit `preferred_username` pour trou
 
 ## Tests
 
+**Test de bout en bout dans le navigateur** : après connexion, la page affiche la balance. Dans l'onglet Réseau, la requête `GET /api/account` part avec l'en-tête `Authorization: Bearer …` et reçoit une réponse `200`.
+
+![Page de l'application avec la balance et l'onglet Réseau](q41-page.png)
+
+**Tests avec `curl`** :
+
 | Test | Réponse |
 |---|---|
 | Sans token | `401` Missing or invalid Authorization header |
