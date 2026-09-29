@@ -3,6 +3,7 @@ from flask import Flask, render_template, request
 from keycloak import KeycloakOpenID
 from keycloak.exceptions import KeycloakError
 import os
+import jwt
 
 app = Flask(__name__)
 app.secret_key = os.getenv("APP_SECRET_KEY")
@@ -14,11 +15,14 @@ users_balances = {
     "john":  17.53,
 }
 
-keycloak_openid = KeycloakOpenID(server_url=os.getenv("KEYCLOAK_URL"),
-                                 realm_name=os.getenv("KEYCLOAK_REALM"),
-                                 client_id=os.getenv("KEYCLOAK_BACKEND_CLIENT_ID"),
-                                 client_secret_key=os.getenv("KEYCLOAK_BACKEND_CLIENT_SECRET"))
+server_url=os.getenv("KEYCLOAK_URL")
 
+# keycloak_openid = KeycloakOpenID(server_url,
+#                                  realm_name=os.getenv("KEYCLOAK_REALM"),
+#                                  client_id=os.getenv("KEYCLOAK_BACKEND_CLIENT_ID"),
+#                                  client_secret_key=os.getenv("KEYCLOAK_BACKEND_CLIENT_SECRET"))
+
+jwks_client = jwt.PyJWKClient( server_url + "/realms/webapp/protocol/openid-connect/certs")
 
 @app.route("/")
 def index():
@@ -33,14 +37,21 @@ def api_account():
         return {"error": "Missing or invalid Authorization header"}, 401
     token = auth_header[len("Bearer "):]
 
-    # b. Vérifier la validité du JWT auprès de Keycloak et extraire les infos de l'utilisateur
+    # b. Vérifier la validité du JWT en local
     try:
-        userinfo = keycloak_openid.userinfo(token)
-    except KeycloakError:
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], audience="account", issuer="http://localhost:8090/realms/webapp")
+    except jwt.PyJWTError:
         return {"error": "Invalid or expired token"}, 401
 
+    # # b. Vérifier la validité du JWT auprès de Keycloak et extraire les infos de l'utilisateur
+    # try:
+    #     userinfo = keycloak_openid.userinfo(token)
+    # except KeycloakError:
+    #     return {"error": "Invalid or expired token"}, 401
+
     # c. Retourner la balance associée à l'utilisateur
-    username = userinfo.get("preferred_username")
+    username = payload.get("preferred_username")
     if username not in users_balances:
         return {"error": f"No account for user {username}"}, 404
     return {"username": username, "balance": users_balances[username]}
